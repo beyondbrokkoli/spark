@@ -4,7 +4,9 @@ require("core.node")
 require("core.region")
 require("core.vision")
 require("core.input")
+require("core.camera")
 require("core.bench")
+require("core.debug")
 
 function love.load()
     -- Initializing via the Spark namespace
@@ -28,25 +30,34 @@ function love.load()
 end
 
 function love.mousepressed(x, y, button)
-    local idx = INPUT.ToIdx(x, y, 40) -- 40 = cellSize
+    -- Use the new world-aware helper for clicks
+    local idx = INPUT.GetMouseGrid(40)
     if idx then
-        -- Toggle the SOLID flag surgically
-        local current = GRID_BUF[idx]
-        if NODE.Has(current, NODE.FLAGS.SOLID) then
-            GRID_BUF[idx] = NODE.Clear(current, NODE.FLAGS.SOLID)
-        else
-            GRID_BUF[idx] = NODE.Set(current, NODE.FLAGS.SOLID)
-        end
+        GRID_BUF[idx] = NODE.Set(GRID_BUF[idx], NODE.FLAGS.SOLID)
     end
 end
 
 function love.draw()
     local cellSize = 40
+    local w, h = love.graphics.getDimensions()
 
-    -- 1. Draw the static grid state
-    VISION.Draw(1, 1, 20, 15, cellSize)
+    -- Determine how many cells fit on screen
+    local viewW = math.ceil(w / cellSize)
+    local viewH = math.ceil(h / cellSize)
 
-    -- 2. Draw the transient hover overlay
+    VISION.Draw(viewW, viewH, cellSize)
+
     local mx, my = love.mouse.getPosition()
     VISION.DrawHover(mx, my, cellSize)
+
+    -- See the bit tricks in action
+    VISION.DrawDebug(cellSize)
+end
+
+function love.update(dt)
+    -- Smooth Camera Movement
+    if love.keyboard.isDown("d") then CAMERA.x = CAMERA.x + CAMERA.speed * dt end
+    if love.keyboard.isDown("a") then CAMERA.x = CAMERA.x - CAMERA.speed * dt end
+    if love.keyboard.isDown("s") then CAMERA.y = CAMERA.y + CAMERA.speed * dt end
+    if love.keyboard.isDown("w") then CAMERA.y = CAMERA.y - CAMERA.speed * dt end
 end
