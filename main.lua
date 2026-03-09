@@ -1,4 +1,5 @@
 -- main.lua
+require("core.settings") -- Load this first!
 require("core.spark")
 require("core.node")
 require("core.region")
@@ -9,36 +10,28 @@ require("core.bench")
 require("core.debug")
 
 function love.load()
-    -- Initializing via the Spark namespace
-    SPARK.Init(1024)
+    SPARK.Init(SETTINGS.GRID_BUFFER_SIZE)
 
-    local x1, y1, x2, y2 = 10, 10, 20, 20
+    -- Use SETTINGS instead of hardcoded numbers to verify
+    local mid = math.floor(SETTINGS.GRID_BUFFER_SIZE / 2)
+    REGION.Apply(mid, mid, mid + 5, mid + 5, NODE.FLAGS.SOLID, "SET")
 
-    -- Region operations remain clear and fast
-    REGION.Apply(x1, y1, x2, y2, NODE.FLAGS.SOLID, "SET")
-
-    -- Verification
-    local testIdx = (15 - 1) * GRID_SIZE + 15
-    if NODE.Has(GRID_BUF[testIdx], NODE.FLAGS.SOLID) then
-        print("Success: Node at 15,15 is SOLID.")
-    end
-
-    -- Benchmark the heavy lifting
+    -- Benchmark the WHOLE grid dynamically
     BENCH.Run("Full Grid Fill", function()
-        REGION.Apply(1, 1, 1024, 1024, NODE.FLAGS.LIT, "SET")
+        REGION.Apply(1, 1, SETTINGS.GRID_BUFFER_SIZE, SETTINGS.GRID_BUFFER_SIZE, NODE.FLAGS.LIT, "SET")
     end)
 end
 
 function love.mousepressed(x, y, button)
     -- Use the new world-aware helper for clicks
-    local idx = INPUT.GetMouseGrid(40)
+    local idx = INPUT.GetMouseGrid(SETTINGS.CELL_SIZE)
     if idx then
         GRID_BUF[idx] = NODE.Set(GRID_BUF[idx], NODE.FLAGS.SOLID)
     end
 end
 
 function love.draw()
-    local cellSize = 40
+    local cellSize = SETTINGS.CELL_SIZE
     local w, h = love.graphics.getDimensions()
 
     -- Determine how many cells fit on screen
@@ -55,9 +48,29 @@ function love.draw()
 end
 
 function love.update(dt)
-    -- Smooth Camera Movement
-    if love.keyboard.isDown("d") then CAMERA.x = CAMERA.x + CAMERA.speed * dt end
-    if love.keyboard.isDown("a") then CAMERA.x = CAMERA.x - CAMERA.speed * dt end
-    if love.keyboard.isDown("s") then CAMERA.y = CAMERA.y + CAMERA.speed * dt end
-    if love.keyboard.isDown("w") then CAMERA.y = CAMERA.y - CAMERA.speed * dt end
+    local cfg = SETTINGS -- Local alias for speed and brevity
+    local screenW, screenH = love.graphics.getDimensions()
+    local maxPixel = GRID_SIZE * cfg.CELL_SIZE
+
+    -- 1. CAMERA MOVEMENT (Using dynamic keys and speed)
+    if love.keyboard.isDown(cfg.KEYS.RIGHT) then CAMERA.x = CAMERA.x + cfg.CAMERA_SPEED * dt end
+    if love.keyboard.isDown(cfg.KEYS.LEFT)  then CAMERA.x = CAMERA.x - cfg.CAMERA_SPEED * dt end
+    if love.keyboard.isDown(cfg.KEYS.DOWN)  then CAMERA.y = CAMERA.y + cfg.CAMERA_SPEED * dt end
+    if love.keyboard.isDown(cfg.KEYS.UP)    then CAMERA.y = CAMERA.y - cfg.CAMERA_SPEED * dt end
+
+    -- 2. CAMERA BOUNDS
+    CAMERA.x = math.max(0, math.min(CAMERA.x, maxPixel - screenW))
+    CAMERA.y = math.max(0, math.min(CAMERA.y, maxPixel - screenH))
+
+    -- 3. INTERACTION
+    local idx = INPUT.GetMouseGrid(cfg.CELL_SIZE)
+    if idx then
+        if love.mouse.isDown(1) then
+            if love.keyboard.isDown(cfg.KEYS.ERASE) then
+                GRID_BUF[idx] = NODE.Clear(GRID_BUF[idx], NODE.FLAGS.SOLID)
+            else
+                GRID_BUF[idx] = NODE.Set(GRID_BUF[idx], NODE.FLAGS.SOLID)
+            end
+        end
+    end
 end
