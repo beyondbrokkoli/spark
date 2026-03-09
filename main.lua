@@ -74,3 +74,7 @@ function love.update(dt)
         end
     end
 end
+
+function love.keypressed(key)
+    if key == "escape" then love.event.quit() end
+end
