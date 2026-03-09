@@ -7,11 +7,20 @@ function INPUT.ToIdx(pixelX, pixelY, cellSize)
     local gridY = math.floor(pixelY / cellSize) + 1
 
     -- OOB Check (Bounds Guard)
+    -- THE FORTRESS: Strict bounds checking
     if gridX < 1 or gridX > GRID_SIZE or gridY < 1 or gridY > GRID_SIZE then
         return nil
     end
 
-    return (gridY - 1) * GRID_SIZE + gridX
+
+    local idx = (gridY - 1) * GRID_SIZE + gridX
+
+    -- THE MATH DRIFT GUARD: 
+    -- Ensures the index actually exists in the allocated C-buffer.
+    if not idx or idx < 1 or idx > (GRID_SIZE * GRID_SIZE) then
+        return nil
+    end
+    return idx
 end
 
 -- camera and mouse logic

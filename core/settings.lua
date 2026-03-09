@@ -1,8 +1,8 @@
 -- core/settings.lua
 SETTINGS = {
     -- World Geometry
-    GRID_BUFFER_SIZE = 10240,
-    CELL_SIZE = 5,
+    GRID_BUFFER_SIZE = 102400,
+    CELL_SIZE = 2,
 
     -- Camera Movement
     CAMERA_SPEED = 10000, -- Pixels per second

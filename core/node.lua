@@ -1,9 +1,12 @@
 -- core/node.lua
+local bit = require("bit")
+
 NODE = {
     FLAGS = {
-        SOLID = bit.lshift(1, 0), -- 1
-        LIT   = bit.lshift(1, 1), -- 2
-        DIRTY = bit.lshift(1, 2), -- 4
+        SOLID = 1,
+        LIT   = 2,
+        DIRTY = 4,
+        DATA  = 8,
     }
 }
 
@@ -17,4 +20,17 @@ end
 
 function NODE.Clear(nodeValue, flag)
     return bit.band(nodeValue, bit.bnot(flag))
+end
+
+-- core/node.lua (Add this)
+function NODE.Update(idx, flag, operation)
+    local val = GRID_BUF[idx]
+    if operation == "SET" then
+        val = NODE.Set(val, flag)
+    elseif operation == "CLEAR" then
+        val = NODE.Clear(val, flag)
+    end
+    -- Mark as dirty so the renderer knows it changed
+    val = NODE.Set(val, NODE.FLAGS.DIRTY)
+    GRID_BUF[idx] = val
 end
