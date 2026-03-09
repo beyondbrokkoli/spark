@@ -3,7 +3,6 @@
 CAMERA = {
     x = 0, -- Pixel X
     y = 0, -- Pixel Y
-    speed = 300 -- Pixels per second
 }
 
 function CAMERA.GetViewport(viewW, viewH, cellSize)
