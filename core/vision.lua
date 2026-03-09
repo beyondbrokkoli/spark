@@ -13,28 +13,37 @@ function SAFE_SET_COLOR(colorTable)
     end
 end
 
-function VISION.Draw(camX, camY, viewW, viewH, squareSize)
+function VISION.Draw(viewW, viewH, cellSize)
+    local startX, startY, offX, offY = CAMERA.GetViewport(viewW, viewH, cellSize)
+
     SAFE_SET_COLOR(PALETTE.SOLID)
-    -- i didnt change the lower part is it still correct?
-    for y = camY, camY + viewH do
-        for x = camX, camX + viewW do
-            local idx = (y - 1) * GRID_SIZE + x
-            if NODE.Has(GRID_BUF[idx], NODE.FLAGS.SOLID) then
-                love.graphics.rectangle("fill", (x-1)*squareSize, (y-1)*squareSize, squareSize, squareSize)
+
+    -- Iterate through the visible window (+1 for partial squares at edges)
+    for y = 0, viewH do
+        for x = 0, viewW do
+            local gx, gy = startX + x, startY + y
+
+            -- Bounds check before buffer access
+            if gx > 0 and gx <= GRID_SIZE and gy > 0 and gy <= GRID_SIZE then
+                local idx = (gy - 1) * GRID_SIZE + gx
+                if NODE.Has(GRID_BUF[idx], NODE.FLAGS.SOLID) then
+                    -- Subtract the sub-pixel offset for smooth scrolling
+                    love.graphics.rectangle("fill",
+                        x * cellSize - offX,
+                        y * cellSize - offY,
+                        cellSize, cellSize)
+                end
             end
         end
     end
 end
--- Add this
-function VISION.DrawHover(mouseX, mouseY, cellSize)
-    local idx = INPUT.ToIdx(mouseX, mouseY, cellSize)
-    if idx then
-        -- Calculate screen coords (Floor ensures clean, crisp lines)
-        local gx = math.floor(mouseX / cellSize)
-        local gy = math.floor(mouseY / cellSize)
 
-        -- Highlighting: Draw a slightly transparent rectangle
-        SAFE_SET_COLOR(PALETTE.HOVER) -- Highlight Overlay
-        love.graphics.rectangle("fill", gx * cellSize, gy * cellSize, cellSize, cellSize)
-    end
+function VISION.DrawHover(mx, my, cellSize)
+    -- Reuse mx/my to store the snapped screen coordinates
+    -- This removes the remainder (misalignment) from the current position
+    mx = mx - ((mx + CAMERA.x) % cellSize)
+    my = my - ((my + CAMERA.y) % cellSize)
+
+    SAFE_SET_COLOR(PALETTE.HOVER)
+    love.graphics.rectangle("fill", mx, my, cellSize, cellSize)
 end
