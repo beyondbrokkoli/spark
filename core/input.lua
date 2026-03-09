@@ -13,3 +13,12 @@ function INPUT.ToIdx(pixelX, pixelY, cellSize)
 
     return (gridY - 1) * GRID_SIZE + gridX
 end
+
+-- camera and mouse logic
+function INPUT.GetMouseGrid(cellSize)
+    local mx, my = love.mouse.getPosition()
+    -- Translate screen-space mouse to world-space
+    local worldX = mx + CAMERA.x
+    local worldY = my + CAMERA.y
+    return INPUT.ToIdx(worldX, worldY, cellSize)
+end
