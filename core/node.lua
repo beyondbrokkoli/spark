@@ -1,14 +1,56 @@
 -- core/node.lua
+local ffi = require("ffi")
 local bit = require("bit")
 
 NODE = {
-    FLAGS = {
-        SOLID = 1,
-        LIT   = 2,
-        DIRTY = 4,
-        DATA  = 8,
-    }
+    FLAGS = { SOLID=1, LIT=2, DIRTY=4, DATA=8 },
+    BUFFER = nil,
+    SIZE = 0
 }
+
+CHUNK_SIZE = 32
+CHUNKS = {}
+
+function NODE.Init(size)
+    NODE.SIZE = size
+    NODE.BUFFER = ffi.new("uint8_t[?]", (size * size) + 1)
+
+    -- Calculate how many chunks we need
+    -- (4096 / 32) = 128 chunks across. 128 * 128 = 16,384 total chunks.
+    local chunksAcross = math.ceil(size / CHUNK_SIZE)
+    local totalChunks = chunksAcross * chunksAcross
+
+    CHUNKS = {}
+    for i = 0, totalChunks - 1 do
+        CHUNKS[i] = {
+            isDirty = true,
+            data = love.image.newImageData(CHUNK_SIZE, CHUNK_SIZE),
+            img = nil -- Created on first draw
+        }
+    end
+end
+
+function NODE.Update(idx, flag, operation)
+    -- 1. Standard Bitwise Update
+    local val = NODE.BUFFER[idx]
+    if operation == "SET" then val = bit.bor(val, flag)
+    elseif operation == "CLEAR" then val = bit.band(val, bit.bnot(flag))
+    end
+    NODE.BUFFER[idx] = bit.bor(val, NODE.FLAGS.DIRTY)
+
+    -- 2. Correct 2D Chunk Mapping
+    local gx = ((idx - 1) % NODE.SIZE) + 1
+    local gy = math.floor((idx - 1) / NODE.SIZE) + 1
+
+    local cx = math.floor((gx - 1) / CHUNK_SIZE)
+    local cy = math.floor((gy - 1) / CHUNK_SIZE)
+    local chunksAcross = math.ceil(NODE.SIZE / CHUNK_SIZE)
+    local chunkIdx = (cy * chunksAcross) + cx
+
+    if CHUNKS[chunkIdx] then
+        CHUNKS[chunkIdx].isDirty = true
+    end
+end
 
 function NODE.Has(nodeValue, flag)
     return bit.band(nodeValue, flag) ~= 0
@@ -20,17 +62,4 @@ end
 
 function NODE.Clear(nodeValue, flag)
     return bit.band(nodeValue, bit.bnot(flag))
-end
-
--- core/node.lua (Add this)
-function NODE.Update(idx, flag, operation)
-    local val = GRID_BUF[idx]
-    if operation == "SET" then
-        val = NODE.Set(val, flag)
-    elseif operation == "CLEAR" then
-        val = NODE.Clear(val, flag)
-    end
-    -- Mark as dirty so the renderer knows it changed
-    val = NODE.Set(val, NODE.FLAGS.DIRTY)
-    GRID_BUF[idx] = val
 end

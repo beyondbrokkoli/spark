@@ -23,7 +23,7 @@ function PORTAL.WalkAndInject(node, startIdx)
         local targetIdx = startIdx + offset
 
         -- Guard against walking off the world
-        if targetIdx <= (GRID_SIZE * GRID_SIZE) then
+        if targetIdx <= (NODE.SIZE * NODE.SIZE) then
             PORTAL.Inject(targetIdx, {key = k, value = v})
         end
 

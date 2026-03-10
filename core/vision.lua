@@ -1,6 +1,6 @@
 -- core/vision.lua
-
 require("core.palette")
+local ffi = require("ffi")
 
 VISION = {}
 
@@ -13,93 +13,123 @@ function SAFE_SET_COLOR(colorTable)
     end
 end
 
+local function rebuildChunk(cIdx)
+    local chunk = CHUNKS[cIdx]
+    local chunksAcross = math.ceil(NODE.SIZE / CHUNK_SIZE)
+    local cy = math.floor(cIdx / chunksAcross)
+    local cx = cIdx % chunksAcross
+    local startGX, startGY = cx * CHUNK_SIZE + 1, cy * CHUNK_SIZE + 1
+
+    -- Get a pointer to the raw pixel data (RGBA8)
+    local pointer = ffi.cast("uint32_t*", chunk.data:getPointer())
+
+    -- Pre-calculate colors as 32-bit integers (0xAABBGGRR)
+    local white = 0xFFFFFFFF
+    local transparent = 0x00000000
+
+    for y = 0, CHUNK_SIZE - 1 do
+        local gy = startGY + y
+        local rowBase = (gy - 1) * NODE.SIZE
+        local destRowOffset = y * CHUNK_SIZE -- Pointer is 1D
+
+        for x = 0, CHUNK_SIZE - 1 do
+            local gx = startGX + x
+            local val = NODE.BUFFER[rowBase + gx]
+
+            -- Direct pointer assignment (Super Fast)
+            if bit.band(val, NODE.FLAGS.SOLID) ~= 0 then
+                pointer[destRowOffset + x] = white
+            else
+                pointer[destRowOffset + x] = transparent
+            end
+        end
+    end
+
+    if not chunk.img then
+        chunk.img = love.graphics.newImage(chunk.data)
+        chunk.img:setFilter("nearest", "nearest")
+    else
+        chunk.img:replacePixels(chunk.data)
+    end
+    chunk.isDirty = false
+end
+
+function VISION.Draw(viewW, viewH, cellSize)
+    local chunksAcross = math.ceil(NODE.SIZE / CHUNK_SIZE)
+
+    -- Calculate visible chunk range
+    local startCX = math.floor(CAMERA.x / (CHUNK_SIZE * cellSize))
+    local startCY = math.floor(CAMERA.y / (CHUNK_SIZE * cellSize))
+    local endCX = math.floor((CAMERA.x + (viewW * cellSize)) / (CHUNK_SIZE * cellSize))
+    local endCY = math.floor((CAMERA.y + (viewH * cellSize)) / (CHUNK_SIZE * cellSize))
+
+    love.graphics.setColor(PALETTE.ACTIVE)
+    for cy = startCY, endCY do
+        for cx = startCX, endCX do
+            local cIdx = (cy * chunksAcross) + cx
+            local chunk = CHUNKS[cIdx]
+
+            if chunk then
+                -- 1. Changed check from .batch to .img
+                if chunk.isDirty or not chunk.img then
+                    rebuildChunk(cIdx)
+                end
+
+                local drawX = (cx * CHUNK_SIZE * cellSize) - CAMERA.x
+                local drawY = (cy * CHUNK_SIZE * cellSize) - CAMERA.y
+
+                -- 2. Draw the image and scale it by cellSize
+                -- love.graphics.draw(drawable, x, y, r, sx, sy)
+                love.graphics.draw(chunk.img, drawX, drawY, 0, cellSize, cellSize)
+            end
+        end
+    end
+end
+
 function VISION.DrawHover(mx, my, cellSize)
     local idx = INPUT.GetMouseGrid(cellSize)
     if not idx then return end
 
-    local val = GRID_BUF[idx]
-    local isSolid = NODE.Has(val, NODE.FLAGS.SOLID)
-    local hasData = NODE.Has(val, NODE.FLAGS.DATA)
+    -- FFI Optimization: Direct access
+    local val = NODE.BUFFER[idx]
+    local isSolid = bit.band(val, NODE.FLAGS.SOLID) ~= 0
+    local hasData = bit.band(val, NODE.FLAGS.DATA) ~= 0
 
-    -- 1. TEXT OVERLAY: Show JSON data if present
     if hasData then
         local data = PORTAL.Get(idx)
-        love.graphics.setColor(1, 1, 1, 1) -- Ensure text is white
-        love.graphics.print("DATA: " .. tostring(data.key) .. " -> " .. tostring(data.value), mx + 20, my - 20)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("DATA: " .. tostring(data.key), mx + 20, my - 20)
     end
 
-    -- 2. COLOR SELECTION: The "Twist"
     local color = isSolid and PALETTE.HOVER_ACTIVE or PALETTE.HOVER_EMPTY
 
-    -- 3. COORDINATE SNAPPING: Align highlight to the world grid
+    -- Fast Snap Math
     local snapX = mx - ((mx + CAMERA.x) % cellSize)
     local snapY = my - ((my + CAMERA.y) % cellSize)
 
-    -- 4. RENDER
     SAFE_SET_COLOR(color)
     love.graphics.rectangle("fill", snapX, snapY, cellSize, cellSize)
     SAFE_SET_COLOR(PALETTE.DEFAULT)
 end
 
--- Update Draw to use the Blue color for SOLID nodes
--- old Draw retained for reference because we are adding SICK draw call optimizations
-function VISION.old_Draw(viewW, viewH, cellSize)
-    local startX, startY, offX, offY = CAMERA.GetViewport(viewW, viewH, cellSize)
+function DecToBin(n)
+    local t = {}
+    for i = 7, 0, -1 do
+        t[#t+1] = math.floor(n / 2^i) % 2
+    end
+    return table.concat(t)
+end
 
-    -- We use the Blue from the old version
-    SAFE_SET_COLOR(PALETTE.ACTIVE)
+function VISION.DrawDebug(cellSize)
+    local mx, my = love.mouse.getPosition()
+    local idx = INPUT.GetMouseGrid(cellSize)
+    if idx then
+        local val = NODE.BUFFER[idx]
+        local debugText = string.format("Idx: %d\nBits: %s\nVal: %d",
+            idx, DecToBin(val), val)
 
-    for y = 0, viewH do
-        for x = 0, viewW do
-            local gx, gy = startX + x, startY + y
-            if gx > 0 and gx <= GRID_SIZE and gy > 0 and gy <= GRID_SIZE then
-                local idx = (gy - 1) * GRID_SIZE + gx
-                local val = GRID_BUF[idx]
-
-                -- 1. Layer 1: Solid (Blue)
-                if NODE.Has(val, NODE.FLAGS.SOLID) then
-                    SAFE_SET_COLOR(PALETTE.ACTIVE)
-                    love.graphics.rectangle("fill", x * cellSize - offX, y * cellSize - offY, cellSize, cellSize)
-                end
-
-                -- 2. Layer 2: Data (Green) - Completely separate from Solid!
-                if NODE.Has(val, NODE.FLAGS.DATA) then
-                    love.graphics.setColor(0, 1, 0, 0.4)
-                    love.graphics.rectangle("line", x * cellSize - offX, y * cellSize - offY, cellSize, cellSize)
-                end
-            end
-        end
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(debugText, mx + 15, my + 15)
     end
 end
 
--- In core/vision.lua
-function VISION.Draw(viewW, viewH, cellSize)
-    local startX, startY, offX, offY = CAMERA.GetViewport(viewW, viewH, cellSize)
-
-    for y = 0, viewH do
-        for x = 0, viewW do
-            local gx, gy = startX + x, startY + y
-            if gx > 0 and gx <= GRID_SIZE and gy > 0 and gy <= GRID_SIZE then
-                local idx = (gy - 1) * GRID_SIZE + gx
-                local val = GRID_BUF[idx]
-
-                -- LAYER 1: SOLID
-                if NODE.Has(val, NODE.FLAGS.SOLID) then
-                    SAFE_SET_COLOR(PALETTE.ACTIVE)
-                    love.graphics.rectangle("fill", x * cellSize - offX, y * cellSize - offY, cellSize, cellSize)
-                end
-
-                -- LAYER 2: DATA
-                if NODE.Has(val, NODE.FLAGS.DATA) then
-                    love.graphics.setColor(0, 1, 0, 0.4)
-                    love.graphics.rectangle("line", x * cellSize - offX, y * cellSize - offY, cellSize, cellSize)
-                end
-
-                -- CLEANUP: If we just processed a dirty node, clean it
-                if NODE.Has(val, NODE.FLAGS.DIRTY) then
-                    GRID_BUF[idx] = NODE.Clear(GRID_BUF[idx], NODE.FLAGS.DIRTY)
-                end
-            end
-        end
-    end
-end

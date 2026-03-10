@@ -1,13 +1,15 @@
 -- core/settings.lua
 SETTINGS = {
-    -- World Geometry
-    GRID_BUFFER_SIZE = 10240,
-    CELL_SIZE = 2,
+    -- 4096 * 4096 = 16MB (Very safe for VM)
+    -- 8192 * 8192 = 64MB (High end)
+    GRID_BUFFER_SIZE = 4096,
 
-    -- Camera Movement
-    CAMERA_SPEED = 10000, -- Pixels per second
+    CELL_SIZE = 1, -- Zoom level (higher = less GPU strain)
+    CAMERA_SPEED = 500,
 
-    -- Controls
+    SIDEBAR_WIDTH = 250,
+    TOPBAR_HEIGHT = 50,
+
     KEYS = {
         UP    = "w",
         DOWN  = "s",
