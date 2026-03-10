@@ -112,24 +112,29 @@ function VISION.DrawHover(mx, my, cellSize)
     SAFE_SET_COLOR(PALETTE.DEFAULT)
 end
 
-function DecToBin(n)
-    local t = {}
-    for i = 7, 0, -1 do
-        t[#t+1] = math.floor(n / 2^i) % 2
-    end
-    return table.concat(t)
-end
-
 function VISION.DrawDebug(cellSize)
     local mx, my = love.mouse.getPosition()
     local idx = INPUT.GetMouseGrid(cellSize)
+
+    -- Move cursor debug to top-left for better visibility during zoom
+    love.graphics.setColor(0, 1, 0, 1) -- Bright Green for Engine Stats
+    local stats = string.format(
+        "Cam: %.0f, %.0f\nZoom: %.2f\nChunks: %d\nMemory: %.2f MB",
+        CAMERA.x, CAMERA.y, cellSize, #CHUNKS, collectgarbage("count") / 1024
+    )
+    love.graphics.print(stats, 10, 10)
+
+    -- Show our new persistent Benchmarks
+    local yOffset = 80
+    for label, _ in pairs(BENCH.registry) do
+        love.graphics.print(label .. " " .. BENCH.GetStats(label), 10, yOffset)
+        yOffset = yOffset + 15
+    end
+
+    -- Original mouse-over logic
     if idx then
         local val = NODE.BUFFER[idx]
-        local debugText = string.format("Idx: %d\nBits: %s\nVal: %d",
-            idx, DecToBin(val), val)
-
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(debugText, mx + 15, my + 15)
+        love.graphics.print(string.format("Idx: %d\nVal: %d", idx, val), mx + 15, my + 15)
     end
 end
-
