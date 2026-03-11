@@ -26,7 +26,8 @@ function BENCH.Run(label, func)
     stats.max = math.max(stats.max, duration)
 
     -- Real-time logging for the current frame
-    table.insert(BENCH.frame_logs, string.format("[%s]: %.6fs", label, duration))
+    -- Real time memory leak because frame_logs is never cleared
+    -- table.insert(BENCH.frame_logs, string.format("[%s]: %.6fs", label, duration))
 end
 
 function BENCH.GetStats(label)
