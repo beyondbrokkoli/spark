@@ -56,6 +56,10 @@ function love.keypressed(key)
         CAMERA.x = (midCoord - 1) * SETTINGS.CELL_SIZE
         CAMERA.y = (midCoord - 1) * SETTINGS.CELL_SIZE
     end
+    if key == SETTINGS.KEYS.FULLSCREEN then
+        local isFull = love.window.getFullscreen()
+        love.window.setFullscreen(not isFull, "desktop")
+    end
     if key == "escape" then love.event.quit() end
 end
 

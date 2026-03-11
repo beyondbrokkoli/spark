@@ -15,6 +15,7 @@ SETTINGS = {
         DOWN  = "s",
         LEFT  = "a",
         RIGHT = "d",
-        ERASE = "lshift"
+        ERASE = "lshift",
+        FULLSCREEN = "f"
     }
 }
