@@ -34,31 +34,12 @@ function love.draw()
     local viewW = math.ceil(w / cellSize)
     local viewH = math.ceil(h / cellSize)
 
-    VISION.Draw(viewW, viewH, cellSize)
+    BENCH.Run("VISION.Draw", function()
+        VISION.Draw(viewW, viewH, cellSize)
+    end)
 
-    local mx, my = love.mouse.getPosition()
-    VISION.DrawHover(mx, my, cellSize)
+    VISION.DrawHover(cellSize)
     VISION.DrawDebug(cellSize)
-end
-
-function love.update(dt)
-    local cfg = SETTINGS
-    local screenW, screenH = love.graphics.getDimensions()
-    local maxPixel = NODE.SIZE * cfg.CELL_SIZE
-    if love.keyboard.isDown(cfg.KEYS.RIGHT) then CAMERA.x = CAMERA.x + cfg.CAMERA_SPEED * dt end
-    if love.keyboard.isDown(cfg.KEYS.LEFT)  then CAMERA.x = CAMERA.x - cfg.CAMERA_SPEED * dt end
-    if love.keyboard.isDown(cfg.KEYS.DOWN)  then CAMERA.y = CAMERA.y + cfg.CAMERA_SPEED * dt end
-    if love.keyboard.isDown(cfg.KEYS.UP)    then CAMERA.y = CAMERA.y - cfg.CAMERA_SPEED * dt end
-    CAMERA.x = math.max(0, math.min(CAMERA.x, maxPixel - screenW))
-    CAMERA.y = math.max(0, math.min(CAMERA.y, maxPixel - screenH))
-    local idx = INPUT.GetMouseGrid(cfg.CELL_SIZE)
-    if idx then
-        if love.mouse.isDown(1) then
-            local op = love.keyboard.isDown(cfg.KEYS.ERASE) and "CLEAR" or "SET"
-            -- CALL NODE.Update to trigger the Dirty Flag!
-            NODE.Update(idx, NODE.FLAGS.SOLID, op)
-        end
-    end
 end
 
 function love.keypressed(key)
@@ -77,17 +58,65 @@ function love.keypressed(key)
     end
     if key == "escape" then love.event.quit() end
 end
-function love.wheelmoved(x, y)
-    -- Zoom in/out with the mouse wheel
-    local zoomSpeed = 0.1
-    local oldZoom = SETTINGS.CELL_SIZE
 
+function love.wheelmoved(x, y)
+    local mx, my = love.mouse.getPosition()
+    local worldX = mx + CAMERA.x
+    local worldY = my + CAMERA.y
+
+    local oldZoom = SETTINGS.CELL_SIZE
+    local zoomSpeed = 1.2
+
+    -- GUARDRAIL: Set a floor (1.0 for VM health) and a ceiling (e.g., 100)
     if y > 0 then
-        SETTINGS.CELL_SIZE = math.min(20, SETTINGS.CELL_SIZE + zoomSpeed)
+        SETTINGS.CELL_SIZE = math.min(100, SETTINGS.CELL_SIZE * zoomSpeed)
     elseif y < 0 then
-        SETTINGS.CELL_SIZE = math.max(0.1, SETTINGS.CELL_SIZE - zoomSpeed)
+        SETTINGS.CELL_SIZE = math.max(1.0, SETTINGS.CELL_SIZE / zoomSpeed)
     end
 
-    -- Optional: Adjust camera so we zoom toward the mouse position
-    -- (This requires a bit more math, but even a basic zoom feels great now)
+    local newZoom = SETTINGS.CELL_SIZE
+    local ratio = newZoom / oldZoom
+
+    CAMERA.x = (CAMERA.x + mx) * ratio - mx
+    CAMERA.y = (CAMERA.y + my) * ratio - my
+end
+
+function love.update(dt)
+    local cfg = SETTINGS
+    local screenW, screenH = love.graphics.getDimensions()
+    local maxPixel = NODE.SIZE * cfg.CELL_SIZE
+
+    -- Movement speed should scale with zoom!
+    -- When zoomed out, move faster; when zoomed in, move precisely.
+    local adjustedSpeed = cfg.CAMERA_SPEED / math.max(1, (1 / cfg.CELL_SIZE))
+
+    if love.keyboard.isDown(cfg.KEYS.RIGHT) then CAMERA.x = CAMERA.x + adjustedSpeed * dt end
+    if love.keyboard.isDown(cfg.KEYS.LEFT)  then CAMERA.x = CAMERA.x - adjustedSpeed * dt end
+    if love.keyboard.isDown(cfg.KEYS.DOWN)  then CAMERA.y = CAMERA.y + adjustedSpeed * dt end
+    if love.keyboard.isDown(cfg.KEYS.UP)    then CAMERA.y = CAMERA.y - adjustedSpeed * dt end
+
+    -- IMPROVED CLAMPING:
+    -- If world > screen: Keep camera within [0, world-screen]
+    -- If world < screen: Force camera to center the world
+    if maxPixel > screenW then
+        CAMERA.x = math.max(0, math.min(CAMERA.x, maxPixel - screenW))
+    else
+        CAMERA.x = (maxPixel - screenW) / 2
+    end
+
+    if maxPixel > screenH then
+        CAMERA.y = math.max(0, math.min(CAMERA.y, maxPixel - screenH))
+    else
+        CAMERA.y = (maxPixel - screenH) / 2
+    end
+
+    -- ... rest of mouse logic ...
+    local idx = INPUT.GetMouseGrid(cfg.CELL_SIZE)
+    if idx then
+        if love.mouse.isDown(1) then
+            local op = love.keyboard.isDown(cfg.KEYS.ERASE) and "CLEAR" or "SET"
+            -- CALL NODE.Update to trigger the Dirty Flag!
+            NODE.Update(idx, NODE.FLAGS.SOLID, op)
+        end
+    end
 end

@@ -5,9 +5,9 @@ BENCH = {
 }
 
 function BENCH.Run(label, func)
-    local start = os.clock()
+    local start = love.timer.getTime()
     func()
-    local duration = os.clock() - start
+    local duration = love.timer.getTime() - start
 
     -- Initialize stats for new labels
     if not BENCH.registry[label] then

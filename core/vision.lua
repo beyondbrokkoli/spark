@@ -15,42 +15,40 @@ end
 
 local function rebuildChunk(cIdx)
     local chunk = CHUNKS[cIdx]
+    if not chunk then print ("This should never happen") return end
     local chunksAcross = math.ceil(NODE.SIZE / CHUNK_SIZE)
     local cy = math.floor(cIdx / chunksAcross)
     local cx = cIdx % chunksAcross
     local startGX, startGY = cx * CHUNK_SIZE + 1, cy * CHUNK_SIZE + 1
 
-    -- Get a pointer to the raw pixel data (RGBA8)
-    local pointer = ffi.cast("uint32_t*", chunk.data:getPointer())
-
     -- Pre-calculate colors as 32-bit integers (0xAABBGGRR)
     local white = 0xFFFFFFFF
     local transparent = 0x00000000
 
+    -- Get a pointer to the raw pixel data (RGBA8)
+    local pointer = ffi.cast("uint32_t*", chunk.data:getPointer())
+
     for y = 0, CHUNK_SIZE - 1 do
         local gy = startGY + y
         local rowBase = (gy - 1) * NODE.SIZE
-        local destRowOffset = y * CHUNK_SIZE -- Pointer is 1D
+
+        -- NEW: Get a direct pointer to the start of this row in the Image Data
+        local rowPtr = pointer + (y * CHUNK_SIZE)
 
         for x = 0, CHUNK_SIZE - 1 do
             local gx = startGX + x
             local val = NODE.BUFFER[rowBase + gx]
 
-            -- Direct pointer assignment (Super Fast)
+            -- Direct pointer access (No more destRowOffset addition)
             if bit.band(val, NODE.FLAGS.SOLID) ~= 0 then
-                pointer[destRowOffset + x] = white
+                rowPtr[x] = white
             else
-                pointer[destRowOffset + x] = transparent
+                rowPtr[x] = transparent
             end
         end
     end
 
-    if not chunk.img then
-        chunk.img = love.graphics.newImage(chunk.data)
-        chunk.img:setFilter("nearest", "nearest")
-    else
-        chunk.img:replacePixels(chunk.data)
-    end
+    chunk.img:replacePixels(chunk.data)
     chunk.isDirty = false
 end
 
@@ -63,30 +61,34 @@ function VISION.Draw(viewW, viewH, cellSize)
     local endCX = math.floor((CAMERA.x + (viewW * cellSize)) / (CHUNK_SIZE * cellSize))
     local endCY = math.floor((CAMERA.y + (viewH * cellSize)) / (CHUNK_SIZE * cellSize))
 
+    -- GUARD: Clamp the loops to actual grid boundaries
+    startCX = math.max(0, startCX)
+    startCY = math.max(0, startCY)
+    endCX = math.min(chunksAcross - 1, endCX)
+    endCY = math.min(chunksAcross - 1, endCY)
+
     love.graphics.setColor(PALETTE.ACTIVE)
     for cy = startCY, endCY do
+        local rowOffset = cy * chunksAcross
         for cx = startCX, endCX do
-            local cIdx = (cy * chunksAcross) + cx
+            local cIdx = rowOffset + cx
             local chunk = CHUNKS[cIdx]
 
             if chunk then
-                -- 1. Changed check from .batch to .img
                 if chunk.isDirty or not chunk.img then
                     rebuildChunk(cIdx)
                 end
 
                 local drawX = (cx * CHUNK_SIZE * cellSize) - CAMERA.x
                 local drawY = (cy * CHUNK_SIZE * cellSize) - CAMERA.y
-
-                -- 2. Draw the image and scale it by cellSize
-                -- love.graphics.draw(drawable, x, y, r, sx, sy)
                 love.graphics.draw(chunk.img, drawX, drawY, 0, cellSize, cellSize)
             end
         end
     end
 end
 
-function VISION.DrawHover(mx, my, cellSize)
+function VISION.DrawHover(cellSize)
+    local mx, my = love.mouse.getPosition()
     local idx = INPUT.GetMouseGrid(cellSize)
     if not idx then return end
 

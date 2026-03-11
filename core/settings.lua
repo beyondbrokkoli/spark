@@ -5,7 +5,7 @@ SETTINGS = {
     GRID_BUFFER_SIZE = 4096,
 
     CELL_SIZE = 1, -- Zoom level (higher = less GPU strain)
-    CAMERA_SPEED = 500,
+    CAMERA_SPEED = 10000,
 
     SIDEBAR_WIDTH = 250,
     TOPBAR_HEIGHT = 50,
